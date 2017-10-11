@@ -12,6 +12,7 @@ char option;
 
 char *device = NULL;
 ostringstream expression;
+char *search_str = NULL;
 
 int iflag=0, rflag=0;
 
@@ -63,6 +64,7 @@ void parse_args(int argc, char *argv[])
 			case 's':
 			{
 				cout<<"\nDEBUG_LOG:\t option \'s\' called.";
+				search_str = optarg;
 				break;
 			}
 			case 'h':
@@ -166,11 +168,23 @@ void process_packet(u_char *args,const struct pcap_pkthdr* pkthdr,const u_char*
 	    }
 	}
     payload = (u_char *)(packet + sizeof(struct ether_header) + type_len + protocol_length);    
+    int payload_length = length - (sizeof(struct ether_header) + type_len + protocol_length);
+    if(search_str!= NULL)
+    {
+    	if(payload_length == 0)
+    	{
+    		return;
+    	}
+    	if(strstr((char *)payload,search_str) == NULL)
+    	{
+    		return;
+    	}
+    }
     printPacketDetails(eth_header, ip_header, pkthdr->ts, length);
     //cerr << "\nDEBUG_LOG: printPacketDetails len:"<<length<<" "<<sizeof(struct ether_header)<<" "<<type_len<<" "<<protocol_length;
-    if (length > 0)
+    if (payload_length > 0)
     {
-    	print_payload(payload, length - (sizeof(struct ether_header) + type_len + protocol_length));
+    	print_payload(payload, payload_length);
     }    
     cout<<endl;
 }
@@ -313,6 +327,7 @@ int main(int argc, char *argv[])
 {
 	expression.clear();
 	expression.str("");
+	search_str = NULL;
 	char errbuf[PCAP_ERRBUF_SIZE];
 	parse_args(argc, argv);
 	const char *filter_exp = (expression.str()).c_str();
