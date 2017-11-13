@@ -32,6 +32,8 @@ char *listen_port = NULL;
 int start_server(struct sockaddr_in serv_addr, struct sockaddr_in ssh_addr);
 void* server_call(int client_socket, sockaddr_in local_socket);
 
+char* key = NULL;
+
 void print_usage(char* prog_name)
 {
 	fprintf(stderr, "\n%s [-l port] -k keyfile destination port\n"\
@@ -58,8 +60,34 @@ void parse_args(int argc, char *argv[])
 				}
 				kflag = 1;	
 				fprintf(stderr,"DEBUG_LOG:\t option \'k\' called for:%s\n",(optarg));
+				
+				FILE *pFile;
+				pFile = fopen ( optarg , "rb" );
+			  	if (pFile==NULL) 
+			  	{
+			  		fprintf(stderr, "Error reading key file\n");
+			  		exit (1);
+			  	}
+
+			  	// allocate memory to contain the whole file:
+			  	key = (char*) malloc (sizeof(char)*(KEYLEN+1));
+			  	if (key == NULL) 
+			  	{
+			  		fprintf(stderr, "Couldn't allocate mem for key\n");
+			  		exit (1);
+			  	}
+
+			  	// copy the file into the buffer:
+			  	int result = fread (key,1,KEYLEN,pFile);
+
+			  	if (result != KEYLEN) 
+			  	{	
+			  		fprintf(stderr, "Key length not proper\n"); 
+			  		exit(1);
+			  	}
+			  	fprintf(stderr, "Key: %s\n",key);
 				break;
-			}
+			}			
 			case 'l':
 			{
 				if (lflag)
@@ -235,7 +263,7 @@ void* read_client(void *arg)
 	ctr_state state;
 	unsigned char _IV[16];
 	AES_KEY aes_k;
-	unsigned char* key = "1234567887654321";
+	//unsigned char* key = "1234567887654321";
 
 	if (AES_set_encrypt_key(key, 128, &aes_k) < 0) 
 	{
@@ -269,6 +297,7 @@ void* read_client(void *arg)
 			memcpy(_IV, buffer, 8);
 			unsigned char str[n - 8];
 			init_ctr(&state, _IV);
+			fprintf(stderr, "Crypto received: %s\n", (buffer+8));
 			AES_ctr128_encrypt(buffer + 8, str, n - 8, &aes_k, state.ivec, state.ecount, &state.num);
 
 			write(STDOUT_FILENO, str, n-8);
@@ -289,7 +318,7 @@ void* write_client(void *arg)
 	ctr_state state;
 	unsigned char _IV[16];
 	AES_KEY aes_k;
-	unsigned char* key = "1234567887654321";
+	//unsigned char* key = "1234567887654321";
 
 	if (AES_set_encrypt_key(key, 128, &aes_k) < 0) 
 	{
@@ -304,6 +333,15 @@ void* write_client(void *arg)
 		close(client_socket);
 	}
 	fcntl(client_socket, F_SETFL, flags | O_NONBLOCK);*/
+	unsigned char C_IV[16];
+	if (!RAND_bytes(C_IV, 8)) 
+	{
+		fprintf(stderr,"Couldn't generate random bytes.\n");
+		pthread_exit(0);
+	}
+	fprintf(stderr, "IV being sent:%s\n", C_IV);
+	int x = write(client_socket,C_IV,8);
+	fprintf(stderr, "IV sent:%s n:%d\n", C_IV,x);
 	while(1)
 	{
 		bzero(buffer,MAXLINE);
@@ -363,15 +401,22 @@ int start_server(struct sockaddr_in serv_addr, struct sockaddr_in ssh_addr)
 
 	sockfd = socket(AF_INET, SOCK_STREAM, 0);
 	if (sockfd < 0)
+	{
 		fprintf(stderr, "ERROR: Couldn't open socket. %s\n", strerror(errno));
+		return -1;
+	}
 
 	if (bind(sockfd, (struct sockaddr *) &serv_addr, sizeof(serv_addr)) < 0)
+	{
 		fprintf(stderr, "ERROR: Couldn't bind socket. %s\n", strerror(errno));
+		return -1;
+	}
 	listen(sockfd, 5);
 	clilen = sizeof(cli_addr);
 	while (1) {
 		//param = (thread_param *)malloc(sizeof(thread_param));
 		newsockfd = accept(sockfd, (struct sockaddr *) &cli_addr, &clilen);
+		fprintf(stderr,"Got a new connection\n");
 		//param->sockfd = newsockfd;
 		//param->ssh_addr = ssh_addr;
 		//param->key = NULL;
@@ -386,7 +431,7 @@ int start_server(struct sockaddr_in serv_addr, struct sockaddr_in ssh_addr)
 			}	
 			else
 			{
-				wait(&status);
+				//wait(&status);
 			}		
 		} else {
 			fprintf(stderr, "ERROR: Couldn't accept. %s\n", strerror(errno));
@@ -417,11 +462,12 @@ void* server_call(int client_socket, sockaddr_in local_socket)
 	int n;
 	int local_socket_fd, session_done = 0;
 	unsigned char buffer[MAXLINE];
-
+	int recv_CIV = 0;
+	unsigned char C_IV[16];
 	bzero(buffer, MAXLINE);
 
 	//if (!ptr) pthread_exit(0); 
-	fprintf(stderr,"New thread started\n");
+	fprintf(stderr,"New process started.\n");
 	//thread_param *params = (thread_param *)ptr;
 	int sock = client_socket;
 	struct sockaddr_in ssh_addr = local_socket;
@@ -494,18 +540,31 @@ void* server_call(int client_socket, sockaddr_in local_socket)
 	unsigned char _IV[16];
 	unsigned char S_IV[16];
 	AES_KEY aes_k;
-	unsigned char* key = "1234567887654321";
+	//unsigned char* key = "1234567887654321";
 
 	if (AES_set_encrypt_key(key, 128, &aes_k) < 0) 
 	{
 		fprintf(stderr,"AES_set_encrypt_key error.\n");
 		pthread_exit(0);
 	}
-
+	
+	fprintf(stderr, "Moving on to normal code.\n");	
 	while (1) 
 	{
+
 		//fprintf(stderr, "about to read from client\n");
 		while ((n = read(client_socket, buffer, MAXLINE)) > 0) {
+			if (!recv_CIV)
+			{
+				//n = read(client_socket,buffer,8);
+				
+				
+				fprintf(stderr, "Received C_IV:%s read:%d\n", buffer,n);
+				memcpy(C_IV, buffer, 8);
+				fprintf(stderr, "Received C_IV%s\n", C_IV);
+				recv_CIV = 1;
+				
+			}
 			//fprintf(stderr, "read from client:%s n:%d\n", buffer,n);
 			//if (n < 8) {
 			//	printf("Packet length smaller than 8!\n");
@@ -514,21 +573,25 @@ void* server_call(int client_socket, sockaddr_in local_socket)
 			//
 			//	free(params);
 			//	pthread_exit(0);
-			//}
+			//}			
+			else
+			{
 			
-			memcpy(_IV, buffer, 8);
-			unsigned char str[n-8];
-			init_ctr(&state, _IV);
-			AES_ctr128_encrypt(buffer+8, str, n-8, &aes_k, state.ivec, state.ecount, &state.num);
-			
-			//fprintf(stderr, "Read from client:%s\n",buffer);
-			//fprintf(stderr, "writing _to_server:%s\n", buffer);
-			write(/*local_socket_fd*/STDOUT_FILENO, str, n-8);
-			//fprintf(stderr, "Done writing to server\n");
-			//fprintf(stderr, "wrote_to_server:%s n:%d\n", buffer,n);
+				memcpy(_IV, buffer, 8);
+				unsigned char str[n-8];
+				init_ctr(&state, _IV);
+				fprintf(stderr, "Crypto received: %s\n", (buffer+8));
+				AES_ctr128_encrypt(buffer+8, str, n-8, &aes_k, state.ivec, state.ecount, &state.num);
+				
+				//fprintf(stderr, "Read from client:%s\n",buffer);
+				//fprintf(stderr, "writing _to_server:%s\n", buffer);
+				write(/*local_socket_fd*/STDOUT_FILENO, str, n-8);
+				//fprintf(stderr, "Done writing to server\n");
+				//fprintf(stderr, "wrote_to_server:%s n:%d\n", buffer,n);
 
-			if (n < MAXLINE)
-				break;
+				if (n < MAXLINE)
+					break;
+			}
 		};
 		
 		//fprintf(stderr, "about to read from server\n");

@@ -24,6 +24,7 @@ typedef struct
 }ctr_state;
 
 #define MAXLINE 4096
+#define KEYLEN 17
 
 void print_usage(char* prog_name);
 void parse_args(int argc, char *argv[]);
