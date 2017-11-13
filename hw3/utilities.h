@@ -23,6 +23,12 @@ typedef struct
     unsigned char ecount[AES_BLOCK_SIZE];
 }ctr_state;
 
+typedef struct 
+{
+	int fd;
+	unsigned char* CIV;
+}client_thread;
+
 #define MAXLINE 4096
 #define KEYLEN 17
 
