@@ -29,9 +29,6 @@ int kflag =0, lflag=0;
 
 char *listen_port = NULL;
 
-int start_server(struct sockaddr_in serv_addr, struct sockaddr_in ssh_addr);
-void* server_call(int client_socket, sockaddr_in local_socket);
-
 unsigned char* key = NULL;
 
 void print_usage(char* prog_name)
@@ -310,34 +307,14 @@ void* read_client(void *arg)
 	while(1)
 	{
 		bzero(buffer,MAXLINE);
-		/*int read_bytes = recv(client_socket,buffer,MAXLINE,0);
-		if(read_bytes < 0)
-		{
-			//fprintf(stderr, "ERROR: Issue reading from socket. %s\n", strerror(errno));
-			//close(client_socket);
-			//exit(EXIT_FAILURE);			
-		}
-		else if(read_bytes > 0)
-		{
-			//fprintf(stderr, "DEBUG: read_client read %s.\n",buffer);
-			write(STDOUT_FILENO, buffer, read_bytes);
-		}*/
 		int n;
 		while ((n = read(client_socket, buffer, MAXLINE)) > 0) {
 			//fprintf(stderr, "Received from server: %d\n", n);
-			/*if (n < 8) {
-				fprintf(stderr, "Packet length smaller than 8!\n");
-				close(sockfd);
-				return 0;
-			}*/
-
-			//memcpy(_IV, buffer, 8);
 			unsigned char str[n];
 			init_ctr(&state, S_IV);
 			//fprintf(stderr, "SIV:%s\n", S_IV);
 			//fprintf(stderr, "Crypto received: %s\n", (buffer+8));
-			//fprintf(stderr, "CIV :%s\n", C_IV);
-			//AES_ctr128_encrypt(buffer + 8, str, n - 8, &aes_k, state.ivec, state.ecount, &state.num);
+			//fprintf(stderr, "CIV :%s\n", C_IV);			
 			AES_ctr128_encrypt(buffer, str, n, &aes_k, state.ivec, state.ecount, &state.num);
 			//fprintf(stderr, "Wrote to stdout: %d\n", n);
 			write(STDOUT_FILENO, buffer, n);
@@ -345,7 +322,7 @@ void* read_client(void *arg)
 			if (n < MAXLINE)
 				break;
 		}
-		//printf("Received message from client: %s\n", buffer);
+		//fprintf(stderr,"Received message from client: %s\n", buffer);
 	}
 }
 
@@ -367,57 +344,18 @@ void* write_client(void *arg)
 		fprintf(stderr,"ERROR: AES_set_encrypt_key error.\n");
 		pthread_exit(0);
 	}
-	/*fcntl(STDIN_FILENO, F_SETFL, O_NONBLOCK);
-
-	int flags = fcntl(client_socket, F_GETFL);
-	if (flags == -1) {
-		printf("read sockfd flag error!\n");
-		close(client_socket);
-	}
-	fcntl(client_socket, F_SETFL, flags | O_NONBLOCK);*/
-	//unsigned char C_IV[16];
-
 	while(1)
 	{
 		bzero(buffer,MAXLINE);
-		/*if (read(STDIN_FILENO, buffer, MAXLINE) < 0)
-		{
-			//fprintf(stderr, "ERROR: Issue reading from STDIN.\n");
-			//close(client_socket);
-			//exit(EXIT_FAILURE);	
-		}
-		int write_bytes = send(client_socket, buffer, strlen(buffer), 0);
-		if(write_bytes < 0)
-		{
-			//fprintf(stderr, "ERROR: Issue writing to socket.\n");
-			//close(client_socket);
-			//exit(EXIT_FAILURE);			
-		}
-		else if(write_bytes > 0)
-		{
-			//fprintf(stderr, "DEBUG: write_client wrote %s.\n",buffer);
-		}*/
 		int n;
 		while ((n = read(STDIN_FILENO, buffer, MAXLINE)) > 0) 
 		{
 			
-			/*if (!RAND_bytes(_IV, 8)) {
-				fprintf(stderr,"Couldn't generate random bytes.\n");
-				pthread_exit(0);
-			}*/
-
-			//char *tmp = (char*)malloc(n + 8);
-			//memcpy(tmp, _IV, 8);
 			unsigned char str[n];
 			init_ctr(&state, C_IV);
 			//fprintf(stderr, "CIV:%s\n", S_IV);
 			AES_ctr128_encrypt(buffer, str, n, &aes_k, state.ivec, state.ecount, &state.num);
-			//memcpy(tmp + 8, str, n);
-			
-			//write(client_socket, tmp, n+8);
 			write(client_socket, buffer, n);
-
-			//free(tmp);
 
 			if (n < MAXLINE)
 				break;
@@ -451,31 +389,27 @@ int start_server(struct sockaddr_in serv_addr, struct sockaddr_in ssh_addr)
 	listen(sockfd, 5);
 	clilen = sizeof(cli_addr);
 	while (1) {
-		//param = (thread_param *)malloc(sizeof(thread_param));
+		
 		newsockfd = accept(sockfd, (struct sockaddr *) &cli_addr, &clilen);
 		fprintf(stderr,"Got a new connection\n");
-		//param->sockfd = newsockfd;
-		//param->ssh_addr = ssh_addr;
-		//param->key = NULL;
-
+		
 		if (newsockfd > 0) {
-			//pthread_create(&thread, 0, server_thread, (void *)param);
-			//pthread_detach(thread);
+		
 			if ((pid=fork()) == 0)
 			{
-				//server_thread((void*)param);
 				server_call(newsockfd,ssh_addr);
 			}	
 			else
 			{
 				close(newsockfd);
 			}		
-		} else {
-			fprintf(stderr, "ERROR: Couldn't accept. %s\n", strerror(errno));
-			//free(param);
+		} 
+		else 
+		{
+			fprintf(stderr, "ERROR: Couldn't accept. %s\n", strerror(errno));			
 		}
 	}
-	return 0; /* shouldn't get here */
+	return 0;
 }
 
 void* server_call(int client_socket, sockaddr_in local_socket)
@@ -488,11 +422,10 @@ void* server_call(int client_socket, sockaddr_in local_socket)
 	bzero(buffer, MAXLINE);
 
 	
-	//fprintf(stderr,"New process started.\n");
-	//thread_param *params = (thread_param *)ptr;
+	//fprintf(stderr,"New process started.\n");	
 	int sock = client_socket;
 	struct sockaddr_in ssh_addr = local_socket;
-	//unsigned char *key = params->key;
+	
 	
 	if (!recv_CIV)
 	{
@@ -528,7 +461,8 @@ void* server_call(int client_socket, sockaddr_in local_socket)
 	}
 	
 	int flags = fcntl(client_socket, F_GETFL);
-	if (flags == -1) {
+	if (flags == -1) 
+	{
 		fprintf(stderr,"ERROR: client_socket flag error.\n");		
 		close(client_socket);
 		close(local_socket_fd);
@@ -538,7 +472,8 @@ void* server_call(int client_socket, sockaddr_in local_socket)
 	fcntl(client_socket, F_SETFL, flags | O_NONBLOCK);
 	
 	flags = fcntl(local_socket_fd, F_GETFL);
-	if (flags == -1) {
+	if (flags == -1) 
+	{
 		fprintf(stderr,"ERROR: local_socket flag error.\n");
 		close(client_socket);
 		close(local_socket_fd);
@@ -546,35 +481,6 @@ void* server_call(int client_socket, sockaddr_in local_socket)
 		exit(EXIT_FAILURE);
 	}
 	fcntl(local_socket_fd, F_SETFL, flags | O_NONBLOCK);
-
-	/*flags = fcntl(STDIN_FILENO, F_GETFL);
-	if (flags == -1) {
-		printf("read ssh_fd flag error!\n");
-		close(client_socket);
-		close(local_socket_fd);
-		//free(params);
-		exit(EXIT_FAILURE);
-	}
-	fcntl(STDIN_FILENO, F_SETFL, flags | O_NONBLOCK);
-
-	flags = fcntl(STDOUT_FILENO, F_GETFL);
-	if (flags == -1) {
-		printf("read ssh_fd flag error!\n");
-		close(client_socket);
-		close(local_socket_fd);
-		//free(params);
-		exit(EXIT_FAILURE);
-	}
-	fcntl(STDOUT_FILENO, F_SETFL, flags | O_NONBLOCK);*/
-
-	//ctr_state state;
-	//AES_KEY aes_key;
-	//unsigned char iv[8];
-	
-	//if (AES_set_encrypt_key(key, 128, &aes_key) < 0) {
-	//	printf("Set encryption key error!\n");
-	//	exit(1);
-	//}
 
 	ctr_state state;
 	AES_KEY aes_k;
@@ -591,45 +497,26 @@ void* server_call(int client_socket, sockaddr_in local_socket)
 	{
 		bzero(buffer, MAXLINE);
 		//fprintf(stderr, "about to read from client\n");
-		while ((n = read(client_socket, buffer, MAXLINE)) > 0) {
+		while ((n = read(client_socket, buffer, MAXLINE)) > 0) 
+		{			
 			
-			//fprintf(stderr, "read from client:%s n:%d\n", buffer,n);
-			//if (n < 8) {
-			//	printf("Packet length smaller than 8!\n");
-			//	close(sock);
-			//	close(ssh_fd);
-			//
-			//	free(params);
-			//	pthread_exit(0);
-			//}			
-			//fprintf(stderr, "Received from client:%d\n", n);
-			
-			{
-			
-				//memcpy(_IV, buffer, 8);
-				unsigned char str[n];
-				bzero(str,n);
-				init_ctr(&state, C_IV);
-				//fprintf(stderr, "Crypto received: %s\n", (buffer+8));
-				//fprintf(stderr, "CIV:%s\n", C_IV);
-				//AES_ctr128_encrypt(buffer+8, str, n-8, &aes_k, state.ivec, state.ecount, &state.num);
-				AES_ctr128_encrypt(buffer, str, n, &aes_k, state.ivec, state.ecount, &state.num);
-				
-				//fprintf(stderr, "writing to server:%s n:%d\n",buffer,n);
-				//fprintf(stderr, "writing _to_server:%s\n", buffer);
-				//write(/*local_socket_fd*/STDOUT_FILENO, str, n-8);
-				int x = write(local_socket_fd/*STDOUT_FILENO*/, buffer, n);
-				//if(x != n)
-				//{
-				//	fprintf(stderr, "x!=n");
-				//}
-				//fprintf(stderr, "Done writing to server\n");
-				//fprintf(stderr, "wrote_to_server: n:%d x%d\n\n", n,x);
-				//fprintf(stderr, "%s\n", str);
+			unsigned char str[n];
+			bzero(str,n);
+			init_ctr(&state, C_IV);			
+			AES_ctr128_encrypt(buffer, str, n, &aes_k, state.ivec, state.ecount, &state.num);
+						
+			int x = write(local_socket_fd/*STDOUT_FILENO*/, buffer, n);
+			//if(x != n)
+			//{
+			//	fprintf(stderr, "x!=n");
+			//}
+			//fprintf(stderr, "Done writing to server\n");
+			//fprintf(stderr, "wrote_to_server: n:%d x%d\n\n", n,x);
+			//fprintf(stderr, "%s\n", str);
 
-				if (n < MAXLINE)
-					break;
-			}
+			if (n < MAXLINE)
+				break;
+			
 		};
 		if(n==0)
 			break;
@@ -638,32 +525,22 @@ void* server_call(int client_socket, sockaddr_in local_socket)
 		while ((n = read(local_socket_fd/*STDIN_FILENO*/, buffer, MAXLINE)) >= 0) {
 			if (n > 0) {
 				//fprintf(stderr, "read from _server:%s n:%d\n", buffer,n);
-				/*if(!RAND_bytes(S_IV, 8)) 
-				{
-					fprintf(stderr, "Couldn't generate random bytes.\n");
-					exit(1);
-				}*/
 				//fprintf(stderr, "Received from server: %d\n", n);
-				//char *tmp = (char*)malloc(n + 8);
-				//memcpy(tmp, S_IV, 8);
 				unsigned char str[n];
 				bzero(str,n);
 				init_ctr(&state, S_IV);
 				//fprintf(stderr, "SIV:%s\n", S_IV);
 				AES_ctr128_encrypt(buffer, str, n, &aes_k, state.ivec, state.ecount, &state.num);
-				//memcpy(tmp+8, str, n);
 				
-				//usleep(900);
 				//fprintf(stderr, "No usleep\n");
 				//fprintf(stderr, "writing_to_client:%s\n", buffer);
-				//write(client_socket, tmp, n+8);
+				
 				int x = write(client_socket, buffer, n);
 				usleep(900);
 				//fprintf(stderr, "write_to_client:n:%d x:%d\n\n", n,x);
-				//fprintf(stderr, "%s\n", str);
-				//free(tmp); 	
+				
 			}
-			//printf("INFO: Sending data to ssh client\n");
+			
 			
 			if (session_done == 0 && n == 0)
 				session_done = 1;
@@ -675,24 +552,7 @@ void* server_call(int client_socket, sockaddr_in local_socket)
 		if (session_done == 1)
 			break;
 	}
-	/*
-	pthread_t read_th, write_th;
-	void *fd_ptr = &client_socket;
-	int read_status = pthread_create(&read_th,NULL,read_from_server, fd_ptr);
-	if(read_status)
-	{
-		fprintf(stderr, "ERROR: Couldn't open read thread.\n" );
-		return NULL;
-	}
-	int write_status = pthread_create(&write_th,NULL,write_to_server,fd_ptr);
-	if (write_status)
-	{
-		fprintf(stderr, "ERROR: Couldn't open write thread.\n" );
-		return NULL;
-	}
-	pthread_join(read_th, NULL);
-	pthread_join(write_th, NULL);*/
-
+	
 	fprintf(stderr,"Closing connection. \n");
 	close(client_socket);
 	close(local_socket_fd);

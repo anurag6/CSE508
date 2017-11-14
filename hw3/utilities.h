@@ -43,5 +43,7 @@ int setup_server(sockaddr_in server_socket, sockaddr_in local_socket);
 void* read_from_server(void *arg);
 void init_ctr(ctr_state *state, const unsigned char iv[16]);
 void* write_to_server(void *arg);
+int start_server(struct sockaddr_in serv_addr, struct sockaddr_in ssh_addr);
+void* server_call(int client_socket, sockaddr_in local_socket);
 
 #endif
