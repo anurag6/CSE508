@@ -168,7 +168,7 @@ void parse_args(int argc, char *argv[])
 		//inet_ntop(AF_INET,&(local_socket.sin_addr),buf, 20);
 		//fprintf(stderr, "DEBUG: local socket address: %s local socket port: %d\n", buf, ntohs(local_socket.sin_port));
 		
-		if (/*setup_server(server_address, local_socket)*/start_server(local_socket, server_address) < 0)
+		if (/*setup_server(server_address, local_socket)*/setup_server(local_socket, server_address) < 0)
 		{
 			fprintf(stderr, "DEBUG: server setup failed.\n" );
 			exit(EXIT_FAILURE);			
@@ -364,9 +364,9 @@ void* write_client(void *arg)
 }
 
 
-int start_server(struct sockaddr_in serv_addr, struct sockaddr_in ssh_addr)
+int setup_server(struct sockaddr_in serv_addr, struct sockaddr_in ssh_addr)
 {
-	int sockfd, newsockfd;
+	int server_socket, client_fd;
 	socklen_t clilen;
 	struct sockaddr_in cli_addr;
 	pthread_t thread;
@@ -374,34 +374,34 @@ int start_server(struct sockaddr_in serv_addr, struct sockaddr_in ssh_addr)
 	int status;
 
 
-	sockfd = socket(AF_INET, SOCK_STREAM, 0);
-	if (sockfd < 0)
+	server_socket = socket(AF_INET, SOCK_STREAM, 0);
+	if (server_socket < 0)
 	{
 		fprintf(stderr, "ERROR: Couldn't open socket. %s\n", strerror(errno));
 		return -1;
 	}
 
-	if (bind(sockfd, (struct sockaddr *) &serv_addr, sizeof(serv_addr)) < 0)
+	if (bind(server_socket, (struct sockaddr *) &serv_addr, sizeof(serv_addr)) < 0)
 	{
 		fprintf(stderr, "ERROR: Couldn't bind socket. %s\n", strerror(errno));
 		return -1;
 	}
-	listen(sockfd, 5);
+	listen(server_socket, 5);
 	clilen = sizeof(cli_addr);
 	while (1) {
 		
-		newsockfd = accept(sockfd, (struct sockaddr *) &cli_addr, &clilen);
+		client_fd = accept(server_socket, (struct sockaddr *) &cli_addr, &clilen);
 		fprintf(stderr,"Got a new connection\n");
 		
-		if (newsockfd > 0) {
+		if (client_fd > 0) {
 		
 			if ((pid=fork()) == 0)
 			{
-				server_call(newsockfd,ssh_addr);
+				server_call(client_fd,ssh_addr);
 			}	
 			else
 			{
-				close(newsockfd);
+				close(client_fd);
 			}		
 		} 
 		else 
